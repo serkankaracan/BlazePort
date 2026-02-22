@@ -1,10 +1,21 @@
 using BlazePort.Components;
+using BlazePort.Runtime;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+// Parse the command-line arguments to determine the application mode and any warnings
+var appArgs = ArgsParser.Parse(args);
+
+// Log any warnings from argument parsing
+if (appArgs.Warning != null)
+    Console.WriteLine($"[BlazePort Startup] {appArgs.Warning}");
+
+// Add di for AppArgs so it can be injected into components
+builder.Services.AddSingleton(appArgs);
 
 var app = builder.Build();
 
@@ -24,4 +35,4 @@ app.UseAntiforgery();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-app.Run();
+await app.RunAsync();

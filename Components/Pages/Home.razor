@@ -1,7 +1,50 @@
 ﻿@page "/"
+@using BlazePort.Runtime
+@inject AppArgs CurrentArgs
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Home - @CurrentArgs.Mode</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1>
+    BlazePort Control Panel
+    <span class="badge bg-dark">@CurrentArgs.Mode</span>
+</h1>
 
-Welcome to your new app.
+<div class="alert @GetAlertClass()">
+    You are currently running in <strong>@CurrentArgs.Mode</strong> mode.
+</div>
+
+@if (!string.IsNullOrWhiteSpace(CurrentArgs.Warning))
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i>
+        @CurrentArgs.Warning
+    </div>
+}
+
+<p>@GetModeDescription()</p>
+
+@code {
+    private string GetAlertClass() =>
+        CurrentArgs.Mode switch
+        {
+            AppMode.Admin => "alert-danger",
+            AppMode.Server => "alert-warning",
+            _ => "alert-primary"
+        };
+
+    private string GetModeDescription() =>
+        CurrentArgs.Mode switch
+        {
+            AppMode.Server =>
+                "Server is running in listening mode. Awaiting incoming connections.",
+
+            AppMode.Client =>
+                "Welcome to port scanning and diagnostics mode.",
+
+            AppMode.Admin =>
+                "Administrative privileges enabled. Proceed with caution.",
+
+            _ =>
+                "Unknown application mode."
+        };
+}
