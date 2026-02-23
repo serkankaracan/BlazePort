@@ -3,7 +3,7 @@ namespace BlazePort.Models;
 public sealed record ServiceEndpoint(
     string ServiceName,
     int Port,
-    TransportProtocol Protocol = TransportProtocol.Tcp)
+    string Modes = "")
 {
-    public override string ToString() => $"{ServiceName} {Port}/{Protocol}";
+    public override string ToString() => $"{ServiceName} {Port}";
 }

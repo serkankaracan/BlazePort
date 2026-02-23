@@ -1,57 +1,19 @@
 # BlazePort
 
-A Blazor Server application that scans network ports using the **Telnet protocol** to determine service availability.
-
-## How It Works
-
-BlazePort connects to each target port using a raw TCP socket — the same mechanism the `telnet` command uses. For each port:
-
-1. **TCP Connect** — Opens a socket to `host:port` with a configurable timeout
-2. **IAC Negotiation** — If the remote service sends Telnet protocol commands (IAC sequences), BlazePort responds with proper WILL/WONT/DO/DONT replies
-3. **Banner Read** — After negotiation completes, the server sends its actual response (login prompt, service version, etc.)
-4. **Status Determination** — Based on the connection result:
-   - Connection succeeded → **Open**
-   - Connection refused → **Closed**
-   - No response within timeout → **Timeout** (likely filtered by firewall)
-   - DNS resolution failed → **DNS Fail**
-   - Network/host unreachable → **Unreachable**
-
-### Why Telnet Protocol Matters
-
-A simple TCP connect only checks if the port is open. BlazePort goes further by handling the **Telnet negotiation layer**:
-
-```
-Simple TCP check:
-  Connect → Port is open → Done (no banner)
-
-BlazePort Telnet check:
-  Connect → Server sends IAC DO ECHO → BlazePort replies IAC WONT ECHO
-          → Server sends IAC WILL SGA → BlazePort replies IAC DO SGA
-          → Server sends "Login: "   → BlazePort captures this as banner
-```
-
-Without responding to IAC commands, many services (especially on port 23) will wait indefinitely for negotiation and never send useful data. BlazePort's `TelnetProtocol` module handles this automatically.
-
-### Supported IAC Options
-
-| Server Sends | BlazePort Responds | Reason |
-|---|---|---|
-| `DO SUPPRESS-GO-AHEAD` | `WILL SGA` | Accept — standard for modern telnet |
-| `DO <other>` | `WONT <option>` | Refuse — we don't support it |
-| `WILL ECHO` | `DO ECHO` | Accept — let server handle echo |
-| `WILL SUPPRESS-GO-AHEAD` | `DO SGA` | Accept — standard for modern telnet |
-| `WILL <other>` | `DONT <option>` | Refuse — we don't need it |
-| Subnegotiation (`SB...SE`) | Skipped | Not needed for banner reading |
+A Blazor Server application for scanning network ports and checking service availability. Port definitions are stored in a local SQLite database managed by Entity Framework Core.
 
 ## Features
 
-- **Telnet-based port scanning** with IAC negotiation for accurate banner retrieval
+- **TCP port scanning** with configurable timeout
 - **ICMP ping** check for each target host
-- **Multi-pass banner reading** — loops until idle timeout, collecting all server output
-- **Mode-based port sets** — Client, Server, and Admin modes load different default ports
-- **Custom port addition** — add any port/protocol to the scan list at runtime
+- **SQLite storage** via EF Core — port definitions persist across restarts
+- **Admin mode** with SHA256 password protection (masked console input)
+- **Port management UI** — add, edit, and delete port entries per mode
+- **Mode-based port sets** — Client, Server, and Admin modes load different ports
+- **Admin aggregated view** — shows all ports with mode badges; duplicates merged
+- **Custom port addition** — add temporary ports to the scan list at runtime
 - **Real-time progress** — results update live as each port is checked
-- **Graceful error handling** — port-in-use detection, try-catch on all event handlers
+- **Single-file publish** — ships as a self-contained `.exe`
 
 ## Getting Started
 
@@ -69,31 +31,57 @@ dotnet run
 
 ```bash
 dotnet run -- --mode Server
+dotnet run -- --mode Admin
 ```
 
 Available modes: `Client` (default), `Server`, `Admin`.
+
+Admin mode requires a console password before the application starts.
+
+### Publish
+
+```bash
+dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
+```
+
+Output: `bin/Release/net8.0/win-x64/publish/BlazePort.exe`
 
 ## Project Structure
 
 ```
 BlazePort/
 ├── Components/
-│   ├── Layout/          # MainLayout, NavMenu
-│   └── Pages/           # Home (scan UI), Error
-├── Data/                # IPortProvider interface + DefaultPortProvider
-├── Models/              # ServiceEndpoint, PingResult, PortResult, enums
-├── Runtime/             # AppArgs, AppMode, ArgsParser (CLI parsing)
+│   ├── Layout/              # MainLayout, NavMenu
+│   └── Pages/
+│       ├── Home.razor       # Port scan UI
+│       ├── Admin.razor      # Port CRUD management
+│       └── Error.razor
+├── Data/
+│   ├── AppDbContext.cs       # EF Core DbContext (Ports table, composite unique)
+│   ├── PortEntity.cs         # Entity: Id, Mode, Port, Name
+│   ├── IPortRepository.cs    # Repository interface
+│   ├── PortRepository.cs     # EF Core repository implementation
+│   ├── IPortProvider.cs      # Port provider interface
+│   └── SqlitePortProvider.cs # Loads ports from SQLite for scanning
+├── Models/
+│   ├── ServiceEndpoint.cs    # Port + Name + Modes
+│   ├── PortResult.cs         # Scan result (Open / Closed / Timeout)
+│   ├── PingResult.cs         # Ping result (Success / Fail)
+│   └── PortStatus.cs         # Status enum
+├── Runtime/
+│   ├── AppArgs.cs            # Parsed CLI arguments
+│   ├── AppMode.cs            # Mode enum (Client / Server / Admin)
+│   └── ArgsParser.cs         # CLI argument parser
 ├── Services/
-│   ├── PortScanner.cs       # Ping + TCP/Telnet port check
-│   └── TelnetProtocol.cs    # IAC parsing and negotiation logic
-└── Program.cs               # Entry point and DI configuration
+│   └── PortScanner.cs        # TCP connect + ICMP ping
+└── Program.cs                # Entry point, DI, admin password gate
 ```
 
 ## Architecture
 
-### Port Data (IPortProvider)
+### Database
 
-Port data is loaded through the `IPortProvider` interface. Currently `DefaultPortProvider` serves hardcoded port lists. To switch to a database, implement `IPortProvider` (e.g. `SqlitePortProvider`) and change one line in `Program.cs`.
+SQLite database (`blazeport.db`) is created automatically on first run via `EnsureCreated()`. The `Ports` table has a composite unique constraint on `(Mode, Port)` to prevent duplicate entries within the same mode. Default ports are seeded on first run.
 
 ### Scan Flow
 
@@ -101,20 +89,16 @@ Port data is loaded through the `IPortProvider` interface. Currently `DefaultPor
 User clicks Run
   │
   ├── For each port in the list:
-  │     ├── PingAsync(host)        → PingResult (OK / FAIL)
-  │     └── CheckAsync(host, port) → PortResult (Open / Closed / Timeout / ...)
-  │           │
-  │           └── TcpCheckAsync
-  │                 ├── Socket.ConnectAsync (with timeout)
-  │                 └── TelnetReadBannerAsync (if banner read enabled)
-  │                       ├── Read raw bytes from stream
-  │                       ├── TelnetProtocol.ParseIac → separate clean text + IAC responses
-  │                       ├── Write IAC responses back to server (negotiation)
-  │                       ├── Append clean text to banner buffer
-  │                       └── Loop until idle timeout or total timeout
+  │     ├── PingAsync(host)        → PingResult (OK / Fail)
+  │     └── CheckAsync(host, port) → PortResult (Open / Closed / Timeout)
+  │           └── TcpClient.ConnectAsync (with timeout)
   │
   └── UI updates after each port (real-time)
 ```
+
+### Admin Password
+
+Admin mode is protected by a SHA256 hash embedded in the binary. The password is entered via masked console input (`*` characters). To change the password, update the hash constant in `Program.cs`.
 
 ## License
 

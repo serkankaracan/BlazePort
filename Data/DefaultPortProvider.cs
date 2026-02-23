@@ -15,7 +15,7 @@ internal sealed class DefaultPortProvider : IPortProvider
 
     private static readonly IReadOnlyList<ServiceEndpoint> ServerPorts = new ServiceEndpoint[]
     {
-        new("DNS", 53, TransportProtocol.Udp),
+        new("DNS", 53),
         new("SMTP", 25),
         new("SSH", 22)
     };

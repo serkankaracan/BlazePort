@@ -1,0 +1,224 @@
+@page "/admin"
+@rendermode InteractiveServer
+
+@using BlazePort.Data
+@using BlazePort.Runtime
+@inject IPortRepository PortRepo
+@inject AppArgs AppArgs
+
+<PageTitle>Port Management - BlazePort</PageTitle>
+
+@if (AppArgs.Mode != AppMode.Admin)
+{
+    <div class="container mt-3">
+        <div class="alert alert-warning">
+            This page is only available in Admin mode. Start the application with <code>--mode Admin</code>.
+        </div>
+        <a href="/" class="btn btn-outline-primary">Back to Home</a>
+    </div>
+}
+else
+{
+    <div class="container" style="max-width:1100px;">
+        <div class="d-flex justify-content-between align-items-center mt-3 mb-3">
+            <h3 class="mb-0">Port Management</h3>
+            <a href="/" class="btn btn-outline-secondary">Home</a>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+        {
+            <div class="alert alert-danger">@ErrorMessage</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(SuccessMessage))
+        {
+            <div class="alert alert-success">@SuccessMessage</div>
+        }
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">@(EditingId.HasValue ? "Update Port" : "Add New Port")</h5>
+                <div class="row g-2 align-items-end">
+                    <div class="col-12 col-md-2">
+                        <label class="form-label">Mode</label>
+                        <select class="form-select" @bind="FormMode" disabled="@EditingId.HasValue">
+                            <option value="Client">Client</option>
+                            <option value="Server">Server</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-2">
+                        <label class="form-label">Port</label>
+                        <input type="number" class="form-control" @bind="FormPort" min="1" max="65535" placeholder="80" />
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" @bind="FormName" placeholder="HTTP" />
+                    </div>
+                    <div class="col-12 col-md-4 d-flex gap-2">
+                        @if (EditingId.HasValue)
+                        {
+                            <button class="btn btn-primary" @onclick="UpdatePort">Update</button>
+                            <button class="btn btn-outline-secondary" @onclick="CancelEdit">Cancel</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-success" @onclick="AddPort">Add</button>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Registered Ports (Client / Server)</h5>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Mode</th>
+                                <th>Port</th>
+                                <th>Name</th>
+                                <th style="width:140px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var p in Ports)
+                            {
+                                <tr>
+                                    <td><span class="badge @(p.Mode == "Client" ? "bg-primary" : "bg-warning text-dark")">@p.Mode</span></td>
+                                    <td>@p.Port</td>
+                                    <td>@p.Name</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary" @onclick="() => StartEdit(p)">Edit</button>
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeletePort(p.Id)">Delete</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (Ports.Count == 0)
+                {
+                    <p class="text-muted mb-0">No ports added yet. You can add one above.</p>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<PortEntity> Ports { get; set; } = new();
+    private string? ErrorMessage { get; set; }
+    private string? SuccessMessage { get; set; }
+
+    private string FormMode { get; set; } = "Client";
+    private int FormPort { get; set; } = 80;
+    private string FormName { get; set; } = "";
+    private long? EditingId { get; set; }
+
+    protected override void OnInitialized()
+    {
+        LoadPorts();
+    }
+
+    private void LoadPorts()
+    {
+        try
+        {
+            ErrorMessage = null;
+            Ports = PortRepo.GetAll().ToList();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+    }
+
+    private void AddPort()
+    {
+        try
+        {
+            ErrorMessage = SuccessMessage = null;
+            if (FormPort is < 1 or > 65535)
+            {
+                ErrorMessage = "Port must be between 1 and 65535.";
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(FormName))
+            {
+                ErrorMessage = "Please enter a name.";
+                return;
+            }
+            PortRepo.Add(FormMode, FormPort, FormName.Trim());
+            SuccessMessage = "Port added successfully.";
+            LoadPorts();
+            FormPort = 80;
+            FormName = "";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+    }
+
+    private void StartEdit(PortEntity p)
+    {
+        EditingId = p.Id;
+        FormMode = p.Mode;
+        FormPort = p.Port;
+        FormName = p.Name;
+        ErrorMessage = SuccessMessage = null;
+    }
+
+    private void CancelEdit()
+    {
+        EditingId = null;
+        FormMode = "Client";
+        FormPort = 80;
+        FormName = "";
+    }
+
+    private void UpdatePort()
+    {
+        if (!EditingId.HasValue) return;
+        try
+        {
+            ErrorMessage = SuccessMessage = null;
+            if (FormPort is < 1 or > 65535)
+            {
+                ErrorMessage = "Port must be between 1 and 65535.";
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(FormName))
+            {
+                ErrorMessage = "Please enter a name.";
+                return;
+            }
+            PortRepo.Update(EditingId.Value, FormPort, FormName.Trim());
+            SuccessMessage = "Port updated successfully.";
+            CancelEdit();
+            LoadPorts();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+    }
+
+    private void DeletePort(long id)
+    {
+        try
+        {
+            ErrorMessage = SuccessMessage = null;
+            PortRepo.Delete(id);
+            if (EditingId == id)
+                CancelEdit();
+            SuccessMessage = "Port deleted successfully.";
+            LoadPorts();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+    }
+}
