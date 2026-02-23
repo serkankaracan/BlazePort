@@ -1,52 +1,36 @@
-﻿namespace BlazePort.Runtime
+namespace BlazePort.Runtime;
+
+internal static class ArgsParser
 {
-    internal static class ArgsParser
+    public static AppArgs Parse(string[]? args)
     {
-        public static AppArgs Parse(string[]? args)
+        var selectedMode = AppMode.Client;
+        string? lastWarning = null;
+
+        if (args is null or { Length: 0 })
+            return new AppArgs(selectedMode);
+
+        for (int i = 0; i < args.Length; i++)
         {
-            // Default mode is Client
-            var selectedMode = AppMode.Client;
-            string? lastWarning = null;
+            if (!args[i].Equals("--mode", StringComparison.OrdinalIgnoreCase))
+                continue;
 
-            // If no arguments are provided, return default AppArgs
-            if (args == null || args.Length == 0)
+            if (i + 1 >= args.Length)
             {
-                return new AppArgs(selectedMode);
+                lastWarning = "No value specified for '--mode'. Defaulting to Client.";
+                break;
             }
 
-            // Iterate through the arguments to find "--mode"
-            for (int i = 0; i < args.Length; i++)
-            {
-                // Check if the current argument is "--mode" (case-insensitive)
-                if (!args[i].Equals("--mode", StringComparison.OrdinalIgnoreCase))
-                    continue;
+            var rawValue = args[i + 1].Trim();
 
-                // Ensure that there is a value following the "--mode" argument
-                if (i + 1 >= args.Length)
-                {
-                    lastWarning = "Hata: '--mode' parametresi için bir değer belirtilmedi. Varsayılan: Client.";
-                    break;
-                }
+            if (Enum.TryParse<AppMode>(rawValue, ignoreCase: true, out var parsedMode))
+                selectedMode = parsedMode;
+            else
+                lastWarning = $"Invalid mode: '{rawValue}'. Valid modes: Client, Server, Admin.";
 
-                // Get the raw value for the mode argument
-                var rawValue = args[i + 1].Trim();
-
-                // Try to parse the raw value into the AppMode enum (case-insensitive)
-                if (Enum.TryParse<AppMode>(rawValue, ignoreCase: true, out var parsedMode))
-                {
-                    // Last valid value wins
-                    selectedMode = parsedMode;
-                }
-                else
-                {
-                    lastWarning = $"Geçersiz mod: '{rawValue}'. Geçerli modlar: Client, Server, Admin.";
-                }
-
-                // Skip the next argument since it's the value for "--mode"
-                i++;
-            }
-
-            return new AppArgs(selectedMode, lastWarning);
+            i++;
         }
+
+        return new AppArgs(selectedMode, lastWarning);
     }
 }

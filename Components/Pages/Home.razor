@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @rendermode InteractiveServer
 
 @using BlazePort.Models
@@ -6,16 +6,14 @@
 @using BlazePort.Data
 @using BlazePort.Runtime
 @inject PortScanner Scanner
+@inject IPortProvider PortProvider
 @inject AppArgs AppArgs
 
-<PageTitle>Home</PageTitle>
+<PageTitle>BlazePort</PageTitle>
 
 <div class="container" style="max-width:1100px;">
     <div class="d-flex justify-content-between align-items-center mt-3 mb-3">
-        <div>
-            <h3 class="mb-0">BlazePort</h3>
-        </div>
-
+        <h3 class="mb-0">BlazePort</h3>
         <span class="badge @GetModeBadgeClass()" style="font-size:0.95rem;">
             Mode: @AppArgs.Mode
         </span>
@@ -35,43 +33,33 @@
                     <label class="form-label"><b>Target Host / IP</b></label>
                     <input class="form-control" @bind="TargetHost" placeholder="e.g. 10.0.0.10 or server.local" />
                 </div>
-
                 <div class="col-12 col-md-6 d-flex gap-2">
                     <button class="btn btn-primary" @onclick="RunAsync" disabled="@IsRunning">
                         @(IsRunning ? "Running..." : "Run")
                     </button>
-
                     <button class="btn btn-outline-secondary" @onclick="ReloadPorts" disabled="@IsRunning">
                         Reload Ports
                     </button>
                 </div>
             </div>
-
             <div class="mt-2">
-                <small class="text-muted">
-                    Ports loaded: <b>@Ports.Count</b>
-                </small>
+                <small class="text-muted">Ports loaded: <b>@Ports.Count</b></small>
             </div>
         </div>
     </div>
 
     <div class="card mb-3">
         <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="mb-0">Custom Port</h5>
-            </div>
-
+            <h5 class="mb-3">Custom Port</h5>
             <div class="row g-3 align-items-end">
                 <div class="col-12 col-md-3">
                     <label class="form-label"><b>Port</b></label>
                     <input class="form-control" inputmode="numeric" @bind="CustomPortText" placeholder="554" />
                 </div>
-
                 <div class="col-12 col-md-4">
                     <label class="form-label"><b>Name (optional)</b></label>
                     <input class="form-control" @bind="CustomPortName" placeholder="RTSP" />
                 </div>
-
                 <div class="col-12 col-md-3">
                     <label class="form-label"><b>Protocol</b></label>
                     <select class="form-select" @bind="CustomProtocol">
@@ -79,14 +67,12 @@
                         <option value="@TransportProtocol.Udp">UDP</option>
                     </select>
                 </div>
-
                 <div class="col-12 col-md-2 d-flex gap-2">
                     <button class="btn btn-success w-100" @onclick="AddCustomPort" disabled="@IsRunning">
                         Add Port
                     </button>
                 </div>
             </div>
-
             <div class="form-check mt-3">
                 <input class="form-check-input" type="checkbox" id="bannerCheck" @bind="ReadBanner" disabled="@IsRunning" />
                 <label class="form-check-label" for="bannerCheck">
@@ -105,12 +91,10 @@
                 @{
                     var total = Results.Count;
                     var checkedCount = Results.Count(r => r.Checked);
-
                     var open = Results.Count(r => r.Checked && r.PortStatus == PortStatus.Open);
                     var closed = Results.Count(r => r.Checked && r.PortStatus == PortStatus.Closed);
                     var timeout = Results.Count(r => r.Checked && r.PortStatus == PortStatus.Timeout);
                     var otherFail = Results.Count(r => r.Checked && r.PortStatus is PortStatus.DnsFail or PortStatus.Unreachable or PortStatus.Error or PortStatus.Unknown);
-
                     var notChecked = total - checkedCount;
 
                     double Pct(int x) => total == 0 ? 0 : (x * 100.0) / total;
@@ -129,56 +113,28 @@
                         <span class="badge bg-warning text-dark">Timeout: @timeout (@timeoutPct.ToString("0.#")%)</span>
                         <span class="badge bg-info text-dark">Other: @otherFail (@otherPct.ToString("0.#")%)</span>
                         <span class="badge bg-secondary">Not checked: @notChecked (@notCheckedPct.ToString("0.#")%)</span>
-
                         <span class="text-muted ms-auto">
                             Checked: <b>@checkedCount</b> / <b>@total</b>
                         </span>
                     </div>
 
                     <div class="progress mt-2" style="height: 22px;">
-                        <div class="progress-bar bg-success" role="progressbar"
-                             style="width:@openPct.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)%"
-                             aria-valuenow="@openPct" aria-valuemin="0" aria-valuemax="100">
-                            @if (openPct >= 10)
-                            {
-                                <text>@openPct.ToString("0.#")%</text>
-                            }
-                        </div>
+                        @{ var inv = System.Globalization.CultureInfo.InvariantCulture; }
 
-                        <div class="progress-bar bg-danger" role="progressbar"
-                             style="width:@closedPct.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)%"
-                             aria-valuenow="@closedPct" aria-valuemin="0" aria-valuemax="100">
-                            @if (closedPct >= 10)
-                            {
-                                <text>@closedPct.ToString("0.#")%</text>
-                            }
+                        <div class="progress-bar bg-success" style="width:@openPct.ToString("0.###", inv)%">
+                            @if (openPct >= 10) { <text>@openPct.ToString("0.#")%</text> }
                         </div>
-
-                        <div class="progress-bar bg-warning text-dark" role="progressbar"
-                             style="width:@timeoutPct.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)%"
-                             aria-valuenow="@timeoutPct" aria-valuemin="0" aria-valuemax="100">
-                            @if (timeoutPct >= 10)
-                            {
-                                <text>@timeoutPct.ToString("0.#")%</text>
-                            }
+                        <div class="progress-bar bg-danger" style="width:@closedPct.ToString("0.###", inv)%">
+                            @if (closedPct >= 10) { <text>@closedPct.ToString("0.#")%</text> }
                         </div>
-
-                        <div class="progress-bar bg-info text-dark" role="progressbar"
-                             style="width:@otherPct.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)%"
-                             aria-valuenow="@otherPct" aria-valuemin="0" aria-valuemax="100">
-                            @if (otherPct >= 10)
-                            {
-                                <text>@otherPct.ToString("0.#")%</text>
-                            }
+                        <div class="progress-bar bg-warning text-dark" style="width:@timeoutPct.ToString("0.###", inv)%">
+                            @if (timeoutPct >= 10) { <text>@timeoutPct.ToString("0.#")%</text> }
                         </div>
-
-                        <div class="progress-bar bg-secondary" role="progressbar"
-                             style="width:@notCheckedPct.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)%"
-                             aria-valuenow="@notCheckedPct" aria-valuemin="0" aria-valuemax="100">
-                            @if (notCheckedPct >= 10)
-                            {
-                                <text>@notCheckedPct.ToString("0.#")%</text>
-                            }
+                        <div class="progress-bar bg-info text-dark" style="width:@otherPct.ToString("0.###", inv)%">
+                            @if (otherPct >= 10) { <text>@otherPct.ToString("0.#")%</text> }
+                        </div>
+                        <div class="progress-bar bg-secondary" style="width:@notCheckedPct.ToString("0.###", inv)%">
+                            @if (notCheckedPct >= 10) { <text>@notCheckedPct.ToString("0.#")%</text> }
                         </div>
                     </div>
                 </div>
@@ -202,7 +158,7 @@
                                 <tr>
                                     <td>@r.Name</td>
                                     <td>@($"{r.Port}/{r.Protocol}")</td>
-                                    <td>@RenderStatusBadge(r.Checked ? r.PingOk : (bool?)null)</td>
+                                    <td>@RenderStatusBadge(r.Checked ? r.PingOk : null)</td>
                                     <td>@(r.PingMs?.ToString() ?? "-")</td>
                                     <td>@RenderPortBadge(r)</td>
                                     <td class="text-muted">@GetRowDetails(r)</td>
@@ -225,7 +181,6 @@
                         </tbody>
                     </table>
                 </div>
-
             </div>
         </div>
     }
@@ -236,129 +191,142 @@
     private bool IsRunning { get; set; }
     private string? ErrorMessage { get; set; }
 
-    // Source of truth: endpoints
     private List<ServiceEndpoint> Ports { get; set; } = new();
-
-    // UI rows
     private List<PortRow> Results { get; } = new();
 
     private string CustomPortText { get; set; } = string.Empty;
     private string CustomPortName { get; set; } = string.Empty;
     private TransportProtocol CustomProtocol { get; set; } = TransportProtocol.Tcp;
-
     private bool ReadBanner { get; set; } = true;
-
-    // Custom set: key = (port, protocol)
     private HashSet<string> CustomPorts { get; } = new();
 
     protected override void OnInitialized()
     {
         LoadPorts();
-        ResetResultsForPorts();
+        RebuildResults();
     }
 
     private void ReloadPorts()
     {
-        ErrorMessage = null;
-        LoadPorts();
-        ResetResultsForPorts();
+        try
+        {
+            ErrorMessage = null;
+            LoadPorts();
+            RebuildResults();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
     }
 
     private void LoadPorts()
     {
         CustomPorts.Clear();
-        Ports = PortSeeder.GetPorts(AppArgs.Mode).ToList();
+        Ports = PortProvider.GetPorts(AppArgs.Mode).ToList();
     }
 
-    private void ResetResultsForPorts()
+    private void RebuildResults()
     {
         Results.Clear();
         foreach (var ep in Ports)
-        {
             Results.Add(PortRow.NotChecked(ep.ServiceName, ep.Port, ep.Protocol));
-        }
     }
 
     private void AddCustomPort()
     {
-        ErrorMessage = null;
-
-        if (!int.TryParse((CustomPortText ?? string.Empty).Trim(), out var port))
+        try
         {
-            ErrorMessage = "Custom port must be a number.";
-            return;
-        }
+            ErrorMessage = null;
 
-        if (port is < 1 or > 65535)
+            if (!int.TryParse((CustomPortText ?? string.Empty).Trim(), out var port))
+            {
+                ErrorMessage = "Custom port must be a number.";
+                return;
+            }
+
+            if (port is < 1 or > 65535)
+            {
+                ErrorMessage = "Custom port must be between 1 and 65535.";
+                return;
+            }
+
+            if (Ports.Any(p => p.Port == port && p.Protocol == CustomProtocol))
+            {
+                ErrorMessage = $"Endpoint {port}/{CustomProtocol} is already in the list.";
+                return;
+            }
+
+            var name = (CustomPortName ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                name = $"Custom-{port}/{CustomProtocol}";
+
+            Ports.Add(new ServiceEndpoint(name, port, CustomProtocol));
+            CustomPorts.Add(PortRow.MakeKey(port, CustomProtocol));
+
+            RebuildResults();
+
+            CustomPortText = string.Empty;
+            CustomPortName = string.Empty;
+        }
+        catch (Exception ex)
         {
-            ErrorMessage = "Custom port must be between 1 and 65535.";
-            return;
+            ErrorMessage = ex.Message;
         }
+    }
 
-        var key = PortRow.MakeKey(port, CustomProtocol);
-
-        if (Ports.Any(p => p.Port == port && p.Protocol == CustomProtocol))
+    private void RemoveCustomPort(string key)
+    {
+        try
         {
-            ErrorMessage = $"Endpoint {port}/{CustomProtocol} is already in the list.";
-            return;
+            if (!CustomPorts.Contains(key))
+                return;
+
+            var (port, protocol) = PortRow.ParseKey(key);
+
+            Ports.RemoveAll(p => p.Port == port && p.Protocol == protocol);
+            CustomPorts.Remove(key);
+
+            RebuildResults();
         }
-
-        var name = (CustomPortName ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(name))
-            name = $"Custom-{port}/{CustomProtocol}";
-
-        Ports.Add(new ServiceEndpoint(name, port, CustomProtocol));
-        CustomPorts.Add(key);
-
-        ResetResultsForPorts();
-
-        CustomPortText = string.Empty;
-        CustomPortName = string.Empty;
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
     }
 
     private async Task RunAsync()
     {
         ErrorMessage = null;
-
-        // keep list stable, reset statuses
-        ResetResultsForPorts();
+        RebuildResults();
 
         var host = (TargetHost ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(host))
         {
             ErrorMessage = "Target host is required.";
-            await InvokeAsync(StateHasChanged);
             return;
         }
 
         if (Ports.Count == 0)
         {
             ErrorMessage = "No ports configured.";
-            await InvokeAsync(StateHasChanged);
             return;
         }
 
         IsRunning = true;
-        await InvokeAsync(StateHasChanged);
 
         try
         {
             foreach (var ep in Ports)
             {
                 var ping = await Scanner.PingAsync(host, timeoutMs: 1000);
-
                 var portResult = await Scanner.CheckAsync(
-                    host,
-                    ep.Port,
-                    timeoutMs: 1500,
-                    protocol: ep.Protocol,
-                    readBanner: ReadBanner);
+                    host, ep.Port, timeoutMs: 1500,
+                    protocol: ep.Protocol, readBanner: ReadBanner);
 
                 var idx = Results.FindIndex(r => r.Port == ep.Port && r.Protocol == ep.Protocol);
                 if (idx >= 0)
-                {
                     Results[idx] = PortRow.FromResults(ep.ServiceName, ep.Port, ep.Protocol, ping, portResult);
-                }
 
                 await InvokeAsync(StateHasChanged);
             }
@@ -376,18 +344,10 @@
 
     private static string GetRowDetails(PortRow r)
     {
-        if (!r.Checked)
-            return "Not checked";
-
-        if (!string.IsNullOrWhiteSpace(r.Error))
-            return r.Error!;
-
-        if (!string.IsNullOrWhiteSpace(r.Banner))
-            return $"Banner: {r.Banner}";
-
-        if (r.ConnectTimeMs is not null)
-            return $"Connect: {r.ConnectTimeMs} ms";
-
+        if (!r.Checked) return "Not checked";
+        if (!string.IsNullOrWhiteSpace(r.Error)) return r.Error!;
+        if (!string.IsNullOrWhiteSpace(r.Banner)) return $"Banner: {r.Banner}";
+        if (r.ConnectTimeMs is not null) return $"Connect: {r.ConnectTimeMs} ms";
         return "-";
     }
 
@@ -395,8 +355,8 @@
     {
         var (text, css) = ok switch
         {
-            null => ("Not checked", "bg-light text-dark border"),
-            true => ("OK", "bg-success"),
+            null  => ("Not checked", "bg-light text-dark border"),
+            true  => ("OK", "bg-success"),
             false => ("FAIL", "bg-danger")
         };
 
@@ -413,13 +373,13 @@
             false => ("Not checked", "bg-light text-dark border"),
             true => row.PortStatus switch
             {
-                PortStatus.Open => ("OPEN", "bg-success"),
-                PortStatus.Closed => ("CLOSED", "bg-danger"),
-                PortStatus.Timeout => ("TIMEOUT", "bg-warning text-dark"),
-                PortStatus.DnsFail => ("DNS FAIL", "bg-info text-dark"),
+                PortStatus.Open        => ("OPEN", "bg-success"),
+                PortStatus.Closed      => ("CLOSED", "bg-danger"),
+                PortStatus.Timeout     => ("TIMEOUT", "bg-warning text-dark"),
+                PortStatus.DnsFail     => ("DNS FAIL", "bg-info text-dark"),
                 PortStatus.Unreachable => ("UNREACH", "bg-info text-dark"),
-                PortStatus.Unknown => ("UNKNOWN", "bg-secondary"),
-                _ => ("ERROR", "bg-secondary")
+                PortStatus.Unknown     => ("UNKNOWN", "bg-secondary"),
+                _                      => ("ERROR", "bg-secondary")
             }
         };
 
@@ -429,27 +389,13 @@
         builder.CloseElement();
     };
 
-    private string GetModeBadgeClass()
-        => AppArgs.Mode switch
-        {
-            AppMode.Client => "bg-primary",
-            AppMode.Server => "bg-warning text-dark",
-            AppMode.Admin => "bg-danger",
-            _ => "bg-secondary"
-        };
-
-    private void RemoveCustomPort(string key)
+    private string GetModeBadgeClass() => AppArgs.Mode switch
     {
-        if (!CustomPorts.Contains(key))
-            return;
-
-        var (port, protocol) = PortRow.ParseKey(key);
-
-        Ports.RemoveAll(p => p.Port == port && p.Protocol == protocol);
-        CustomPorts.Remove(key);
-
-        ResetResultsForPorts();
-    }
+        AppMode.Client => "bg-primary",
+        AppMode.Server => "bg-warning text-dark",
+        AppMode.Admin  => "bg-danger",
+        _              => "bg-secondary"
+    };
 
     private sealed record PortRow(
         string Name,
@@ -471,28 +417,15 @@
         {
             var parts = key.Split(':', 2);
             var port = int.Parse(parts[0]);
-
-            // enum parse (TCP/UDP)
             if (!Enum.TryParse(parts[1], out TransportProtocol protocol))
                 protocol = TransportProtocol.Tcp;
-
             return (port, protocol);
         }
 
         public static PortRow NotChecked(string name, int port, TransportProtocol protocol)
-            => new(name, port, protocol, Checked: false, PingOk: null, PingMs: null, PortStatus: null, ConnectTimeMs: null, Banner: null, Error: null);
+            => new(name, port, protocol, false, null, null, null, null, null, null);
 
         public static PortRow FromResults(string name, int port, TransportProtocol protocol, PingResult ping, PortResult pr)
-            => new(
-                name,
-                port,
-                protocol,
-                Checked: true,
-                PingOk: ping.Ok,
-                PingMs: ping.RoundtripTime,
-                PortStatus: pr.Status,
-                ConnectTimeMs: pr.ConnectTimeMs,
-                Banner: pr.Banner,
-                Error: pr.Error);
+            => new(name, port, protocol, true, ping.Ok, ping.RoundtripTime, pr.Status, pr.ConnectTimeMs, pr.Banner, pr.Error);
     }
 }

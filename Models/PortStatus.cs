@@ -1,13 +1,12 @@
-﻿namespace BlazePort.Models
+namespace BlazePort.Models;
+
+public enum PortStatus
 {
-    public enum PortStatus
-    {
-        Open,
-        Closed,       // connection refused vb.
-        Timeout,      // filtered / dropped
-        DnsFail,
-        Unreachable,  // network/host unreachable
-        Error,
-        Unknown
-    }
+    Open,
+    Closed,
+    Timeout,
+    DnsFail,
+    Unreachable,
+    Error,
+    Unknown
 }

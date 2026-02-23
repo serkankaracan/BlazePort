@@ -1,8 +1,7 @@
-﻿namespace BlazePort.Models
+namespace BlazePort.Models;
+
+public enum TransportProtocol
 {
-    public enum TransportProtocol
-    {
-        Tcp,
-        Udp
-    }
+    Tcp,
+    Udp
 }

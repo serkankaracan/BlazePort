@@ -1,9 +1,8 @@
-﻿namespace BlazePort.Runtime
+namespace BlazePort.Runtime;
+
+internal enum AppMode
 {
-    internal enum AppMode
-    {
-        Client,
-        Server,
-        Admin
-    }
+    Client,
+    Server,
+    Admin
 }
