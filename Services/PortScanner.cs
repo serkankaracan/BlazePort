@@ -65,7 +65,7 @@ public sealed class PortScanner
             if (!readBanner)
                 return PortResult.Open(sw.ElapsedMilliseconds);
 
-            return await TelnetReadBannerAsync(socket, sw.ElapsedMilliseconds, timeoutMs, bannerMaxBytes);
+            return await TelnetReadBannerAsync(socket, host, port, sw.ElapsedMilliseconds, timeoutMs, bannerMaxBytes);
         }
         catch (SocketException ex)
         {
@@ -90,12 +90,13 @@ public sealed class PortScanner
     }
 
     /// <summary>
-    /// Reads banner using proper telnet protocol: handles IAC negotiation,
-    /// waits for the server to respond after negotiation completes, and
-    /// collects the clean text output.
+    /// Phase 1: Passive read — wait for server to send data (handles IAC + immediate banners).
+    /// Phase 2: Active probe — if no text received and a probe exists for this port, send it and read.
     /// </summary>
     private static async Task<PortResult> TelnetReadBannerAsync(
         Socket socket,
+        string host,
+        int port,
         long connectTimeMs,
         int timeoutMs,
         int bannerMaxBytes)
@@ -111,6 +112,7 @@ public sealed class PortScanner
             var totalTimeout = Stopwatch.StartNew();
             var idleTimeoutMs = Math.Min(timeoutMs, 500);
 
+            // Phase 1: Passive — read what the server sends on its own
             while (totalTimeout.ElapsedMilliseconds < timeoutMs && banner.Length < bannerMaxBytes)
             {
                 var readTask = ns.ReadAsync(buffer, 0, buffer.Length);
@@ -137,13 +139,70 @@ public sealed class PortScanner
                 if (cleanOutput.Length > 0)
                     banner.Append(Encoding.ASCII.GetString(cleanOutput));
             }
+
+            // Phase 2: Active probe — if nothing received, try sending a known probe
+            if (banner.Length == 0 && totalTimeout.ElapsedMilliseconds < timeoutMs)
+            {
+                var probe = GetProbe(port, host);
+
+                if (probe is not null)
+                {
+                    try
+                    {
+                        await ns.WriteAsync(Encoding.ASCII.GetBytes(probe));
+                        await ns.FlushAsync();
+                    }
+                    catch { goto done; }
+
+                    while (totalTimeout.ElapsedMilliseconds < timeoutMs && banner.Length < bannerMaxBytes)
+                    {
+                        var readTask = ns.ReadAsync(buffer, 0, buffer.Length);
+                        var completed = await Task.WhenAny(readTask, Task.Delay(idleTimeoutMs));
+
+                        if (completed != readTask)
+                            break;
+
+                        var read = await readTask;
+                        if (read == 0) break;
+
+                        banner.Append(Encoding.ASCII.GetString(buffer, 0, read));
+                    }
+                }
+            }
         }
         catch
         {
             // Banner read failed; port is still open.
         }
 
+        done:
         var text = banner.ToString().Trim();
         return PortResult.Open(connectTimeMs, string.IsNullOrWhiteSpace(text) ? null : text);
+    }
+
+    /// <summary>
+    /// Returns a probe request for known protocols.
+    /// Falls back to a generic CRLF probe for unknown ports.
+    /// Returns null only for ports where raw TCP probing is impossible (e.g. TLS).
+    /// </summary>
+    private static string? GetProbe(int port, string host)
+    {
+        return port switch
+        {
+            // HTTP — send a minimal request
+            80 or 8080 or 8000 or 8888 or 3000 or 5000
+                => $"HEAD / HTTP/1.0\r\nHost: {host}\r\nConnection: close\r\n\r\n",
+
+            // TLS — raw TCP won't work, skip probe
+            443 or 8443
+                => null,
+
+            // SMTP — identify ourselves
+            25 or 587
+                => "EHLO blazeport\r\n",
+
+            // Generic fallback — a bare CRLF triggers a response from most text-based services
+            _ => "\r\n"
+        };
     }
 }
