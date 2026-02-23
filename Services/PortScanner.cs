@@ -65,7 +65,7 @@ public sealed class PortScanner
             if (!readBanner)
                 return PortResult.Open(sw.ElapsedMilliseconds);
 
-            return await TryReadBannerAsync(socket, sw.ElapsedMilliseconds, timeoutMs, bannerMaxBytes);
+            return await TelnetReadBannerAsync(socket, sw.ElapsedMilliseconds, timeoutMs, bannerMaxBytes);
         }
         catch (SocketException ex)
         {
@@ -89,29 +89,53 @@ public sealed class PortScanner
         }
     }
 
-    private static async Task<PortResult> TryReadBannerAsync(
+    /// <summary>
+    /// Reads banner using proper telnet protocol: handles IAC negotiation,
+    /// waits for the server to respond after negotiation completes, and
+    /// collects the clean text output.
+    /// </summary>
+    private static async Task<PortResult> TelnetReadBannerAsync(
         Socket socket,
         long connectTimeMs,
         int timeoutMs,
         int bannerMaxBytes)
     {
+        var banner = new StringBuilder();
+
         try
         {
             socket.ReceiveTimeout = timeoutMs;
             using var ns = new NetworkStream(socket, ownsSocket: false);
 
             var buffer = new byte[Math.Clamp(bannerMaxBytes, 1, 4096)];
-            var readTask = ns.ReadAsync(buffer, 0, buffer.Length);
-            var readCompleted = await Task.WhenAny(readTask, Task.Delay(Math.Min(timeoutMs, 1000)));
+            var totalTimeout = Stopwatch.StartNew();
+            var idleTimeoutMs = Math.Min(timeoutMs, 500);
 
-            if (readCompleted == readTask)
+            while (totalTimeout.ElapsedMilliseconds < timeoutMs && banner.Length < bannerMaxBytes)
             {
+                var readTask = ns.ReadAsync(buffer, 0, buffer.Length);
+                var completed = await Task.WhenAny(readTask, Task.Delay(idleTimeoutMs));
+
+                if (completed != readTask)
+                    break;
+
                 var read = await readTask;
-                if (read > 0)
+                if (read == 0) break;
+
+                var (cleanOutput, iacResponses) = TelnetProtocol.ParseIac(buffer, read);
+
+                if (iacResponses.Length > 0)
                 {
-                    var text = StripTelnetIac(Encoding.ASCII.GetString(buffer, 0, read));
-                    return PortResult.Open(connectTimeMs, text.Trim());
+                    try
+                    {
+                        await ns.WriteAsync(iacResponses);
+                        await ns.FlushAsync();
+                    }
+                    catch { break; }
                 }
+
+                if (cleanOutput.Length > 0)
+                    banner.Append(Encoding.ASCII.GetString(cleanOutput));
             }
         }
         catch
@@ -119,24 +143,7 @@ public sealed class PortScanner
             // Banner read failed; port is still open.
         }
 
-        return PortResult.Open(connectTimeMs);
-    }
-
-    /// <summary>
-    /// Strips telnet IAC (0xFF) negotiation bytes from the banner string.
-    /// </summary>
-    private static string StripTelnetIac(string input)
-    {
-        var sb = new StringBuilder(input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            if (input[i] == (char)0xFF)
-            {
-                i += 2; // Skip IAC + command + option (3 bytes total)
-                continue;
-            }
-            sb.Append(input[i]);
-        }
-        return sb.ToString();
+        var text = banner.ToString().Trim();
+        return PortResult.Open(connectTimeMs, string.IsNullOrWhiteSpace(text) ? null : text);
     }
 }
