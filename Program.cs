@@ -1,5 +1,6 @@
 using BlazePort.Components;
 using BlazePort.Runtime;
+using BlazePort.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +17,8 @@ if (appArgs.Warning != null)
 
 // Add di for AppArgs so it can be injected into components
 builder.Services.AddSingleton(appArgs);
+
+builder.Services.AddSingleton<PortScanner>();
 
 var app = builder.Build();
 
