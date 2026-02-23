@@ -32,4 +32,14 @@ app.UseAntiforgery();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-await app.RunAsync();
+try
+{
+    await app.RunAsync();
+}
+catch (IOException ex) when (ex.InnerException is Microsoft.AspNetCore.Connections.AddressInUseException)
+{
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine("[BlazePort] Port is already in use. The application may already be running.");
+    Console.ResetColor();
+    Environment.Exit(1);
+}
