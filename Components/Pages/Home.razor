@@ -49,21 +49,32 @@
     </div>
 
     <div class="card mb-3">
-        <div class="card-body">
-            <h5 class="mb-3">Custom Port</h5>
-            <div class="row g-3 align-items-end">
-                <div class="col-12 col-md-3">
-                    <label class="form-label"><b>Port</b></label>
-                    <input class="form-control" inputmode="numeric" @bind="CustomPortText" placeholder="554" />
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label"><b>Name (optional)</b></label>
-                    <input class="form-control" @bind="CustomPortName" placeholder="RTSP" />
-                </div>
-                <div class="col-12 col-md-3 d-flex gap-2">
-                    <button class="btn btn-success w-100" @onclick="AddCustomPort" disabled="@IsRunning">
-                        Add Port
-                    </button>
+        <div class="card-header py-2 user-select-none @(CustomPortExpanded ? "" : "border-0")" style="cursor: pointer;"
+             @onclick="ToggleCustomPortSection"
+             @onkeydown="OnCustomPortHeaderKeydown"
+             role="button"
+             tabindex="0">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Custom Port</h5>
+                <span class="badge bg-light text-dark">@(CustomPortExpanded ? "▼" : "▶")</span>
+            </div>
+        </div>
+        <div class="collapse @(CustomPortExpanded ? "show" : "")">
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-12 col-md-3">
+                        <label class="form-label"><b>Port</b></label>
+                        <input class="form-control" inputmode="numeric" @bind="CustomPortText" placeholder="554" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label"><b>Name (optional)</b></label>
+                        <input class="form-control" @bind="CustomPortName" placeholder="RTSP" />
+                    </div>
+                    <div class="col-12 col-md-3 d-flex gap-2">
+                        <button class="btn btn-success w-100" @onclick="AddCustomPort" disabled="@IsRunning">
+                            Add Port
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -77,38 +88,25 @@
 
                 @{
                     var total = Results.Count;
-                    var open = Results.Count(r => r.Checked && r.PortStatus == PortStatus.Open);
-                    var closed = Results.Count(r => r.Checked && r.PortStatus != PortStatus.Open);
-                    var notChecked = Results.Count(r => !r.Checked);
-
-                    double Pct(int x) => total == 0 ? 0 : (x * 100.0) / total;
-
-                    var openPct = Pct(open);
-                    var closedPct = Pct(closed);
-                    var notCheckedPct = Pct(notChecked);
+                    var scanned = Results.Count(r => r.Checked);
+                    var scannedPct = total == 0 ? 0 : (scanned * 100.0) / total;
+                    var inv = System.Globalization.CultureInfo.InvariantCulture;
                 }
 
                 <div class="mb-3">
-                    <div class="d-flex flex-wrap gap-2 align-items-center">
-                        <span class="badge bg-success">Open: @open (@openPct.ToString("0.#")%)</span>
-                        <span class="badge bg-danger">Closed: @closed (@closedPct.ToString("0.#")%)</span>
-                        <span class="badge bg-secondary">Not checked: @notChecked (@notCheckedPct.ToString("0.#")%)</span>
+                    <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                        <span class="badge bg-success">Open: @Results.Count(r => r.Checked && r.PortStatus == PortStatus.Open)</span>
+                        <span class="badge bg-danger">Closed: @Results.Count(r => r.Checked && r.PortStatus != PortStatus.Open)</span>
+                        <span class="badge bg-secondary">Not checked: @Results.Count(r => !r.Checked)</span>
                         <span class="text-muted ms-auto">
-                            Checked: <b>@(open + closed)</b> / <b>@total</b>
+                            Scanned: <b>@scanned</b> / <b>@total</b>
                         </span>
                     </div>
 
-                    <div class="progress mt-2" style="height: 22px;">
-                        @{ var inv = System.Globalization.CultureInfo.InvariantCulture; }
-
-                        <div class="progress-bar bg-success" style="width:@openPct.ToString("0.###", inv)%">
-                            @if (openPct >= 10) { <text>@openPct.ToString("0.#")%</text> }
-                        </div>
-                        <div class="progress-bar bg-danger" style="width:@closedPct.ToString("0.###", inv)%">
-                            @if (closedPct >= 10) { <text>@closedPct.ToString("0.#")%</text> }
-                        </div>
-                        <div class="progress-bar bg-secondary" style="width:@notCheckedPct.ToString("0.###", inv)%">
-                            @if (notCheckedPct >= 10) { <text>@notCheckedPct.ToString("0.#")%</text> }
+                    <div class="progress mt-2" style="height: 22px; background-color: #e9ecef;">
+                        <div class="progress-bar" role="progressbar" style="width:@scannedPct.ToString("0.###", inv)%; background-color: #0d6efd;"
+                             aria-valuenow="@scanned" aria-valuemin="0" aria-valuemax="@total">
+                            @scannedPct.ToString("0.#")%
                         </div>
                     </div>
                 </div>
@@ -125,7 +123,7 @@
                                 <th style="width:150px;">Endpoint</th>
                                 <th style="width:120px;">Ping</th>
                                 <th style="width:110px;">Ping ms</th>
-                                <th style="width:150px;">Port</th>
+                                <th style="width:150px;">Telnet</th>
                                 <th>Details</th>
                                 <th style="width:110px;">Actions</th>
                             </tr>
@@ -182,6 +180,7 @@
     private List<ServiceEndpoint> Ports { get; set; } = new();
     private List<PortRow> Results { get; } = new();
 
+    private bool CustomPortExpanded { get; set; }
     private string CustomPortText { get; set; } = string.Empty;
     private string CustomPortName { get; set; } = string.Empty;
     private HashSet<string> CustomPorts { get; } = new();
@@ -190,6 +189,16 @@
     {
         LoadPorts();
         RebuildResults();
+    }
+
+    private void ToggleCustomPortSection() => CustomPortExpanded = !CustomPortExpanded;
+
+    private void OnCustomPortHeaderKeydown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" || e.Key == " ")
+        {
+            CustomPortExpanded = !CustomPortExpanded;
+        }
     }
 
     private void ReloadPorts()
@@ -336,31 +345,33 @@
 
     private RenderFragment RenderStatusBadge(bool? ok) => builder =>
     {
-        var (text, css) = ok switch
+        var (symbol, css, title) = ok switch
         {
-            null  => ("Not checked", "bg-light text-dark border"),
-            true  => ("OK", "bg-success"),
-            false => ("FAIL", "bg-danger")
+            null  => ("–", "bg-light text-dark border", "Not checked"),
+            true  => ("✓", "bg-success", "OK"),
+            false => ("✗", "bg-danger", "FAIL")
         };
 
         builder.OpenElement(0, "span");
         builder.AddAttribute(1, "class", $"badge {css}");
-        builder.AddContent(2, text);
+        builder.AddAttribute(2, "title", title);
+        builder.AddContent(3, symbol);
         builder.CloseElement();
     };
 
     private RenderFragment RenderPortBadge(PortRow row) => builder =>
     {
-        var (text, css) = row.Checked switch
+        var (symbol, css, title) = row.Checked switch
         {
-            false => ("Not checked", "bg-light text-dark border"),
-            true when row.PortStatus == PortStatus.Open => ("OPEN", "bg-success"),
-            _ => ("CLOSED", "bg-danger")
+            false => ("–", "bg-light text-dark border", "Not checked"),
+            true when row.PortStatus == PortStatus.Open => ("✓", "bg-success", "Open"),
+            _ => ("✗", "bg-danger", "Closed")
         };
 
         builder.OpenElement(0, "span");
         builder.AddAttribute(1, "class", $"badge {css}");
-        builder.AddContent(2, text);
+        builder.AddAttribute(2, "title", title);
+        builder.AddContent(3, symbol);
         builder.CloseElement();
     };
 
