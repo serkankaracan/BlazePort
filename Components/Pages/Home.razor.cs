@@ -78,11 +78,17 @@ public partial class Home
                     r.Port,
                     r.Modes,
                     r.PortStatus?.ToString() ?? string.Empty,
+                    r.Checked ? r.PingOk : null,
                     r.PingMs,
+                    r.Checked ? r.PortStatus == PortStatus.Open : null,
+                    r.ConnectTimeMs,
                     r.Error))
                 .ToList();
 
-            var pdfBytes = PdfExporter.BuildResultsPdf(TargetHost ?? string.Empty, rows);
+            var pdfBytes = PdfExporter.BuildResultsPdf(
+                TargetHost ?? string.Empty,
+                AppArgs.Mode.ToString(),
+                rows);
             var base64 = Convert.ToBase64String(pdfBytes);
 
             var safeHost = string.IsNullOrWhiteSpace(TargetHost)

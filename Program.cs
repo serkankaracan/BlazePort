@@ -20,6 +20,7 @@ if (!string.IsNullOrWhiteSpace(appArgs.Warning))
 if (appArgs.Mode == AppMode.Admin)
 {
     // SHA256("admin") — to change, update this hash.
+    // powershell -NoProfile -Command "[BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes('admin'))).Replace('-','').ToLower()"
     const string adminPasswordHash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918";
 
     const int maxAttempts = 3; // Maximum number of attempts
@@ -50,7 +51,7 @@ if (appArgs.Mode == AppMode.Admin)
         }
         else
         {
-            // Yanlış parola, kalan hak bilgisini göster
+            // wrong password but still have attempts left
             var remaining = maxAttempts - attempts;
             Console.WriteLine($"[BlazePort] Invalid password. Attempts left: {remaining}.");
             Console.ResetColor();
@@ -60,7 +61,8 @@ if (appArgs.Mode == AppMode.Admin)
 
 var dbPath = Path.Combine(AppContext.BaseDirectory, "blazeport.db"); // Path to the database file
 
-// TODO: verify QuestPDF license compliance for your organization
+// QuestPDF license compliance for your organization
+// The library is free for individuals, non-profits, all FOSS projects, and organizations under $1M in annual revenue.
 QuestPDF.Settings.License = LicenseType.Community;
 
 builder.Services.AddSingleton(appArgs);
