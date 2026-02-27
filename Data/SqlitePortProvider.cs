@@ -3,11 +3,11 @@ using BlazePort.Runtime;
 
 namespace BlazePort.Data;
 
-internal sealed class SqlitePortProvider : IPortProvider
+internal sealed class SqlitePortProvider
 {
-    private readonly IPortRepository _repo;
+    private readonly PortRepository _repo;
 
-    public SqlitePortProvider(IPortRepository repo)
+    public SqlitePortProvider(PortRepository repo)
     {
         _repo = repo;
     }

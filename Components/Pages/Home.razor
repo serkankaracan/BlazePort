@@ -6,8 +6,9 @@
 @using BlazePort.Data
 @using BlazePort.Runtime
 @inject PortScanner Scanner
-@inject IPortProvider PortProvider
+@inject SqlitePortProvider PortProvider
 @inject AppArgs AppArgs
+@inject IJSRuntime JS
 
 <PageTitle>BlazePort</PageTitle>
 
@@ -36,9 +37,6 @@
                 <div class="col-12 col-md-6 d-flex gap-2">
                     <button class="btn btn-primary" @onclick="RunAsync" disabled="@IsRunning">
                         @(IsRunning ? "Running..." : "Run")
-                    </button>
-                    <button class="btn btn-outline-secondary" @onclick="ReloadPorts" disabled="@IsRunning">
-                        Reload Ports
                     </button>
                 </div>
             </div>
@@ -166,244 +164,13 @@
                         </tbody>
                     </table>
                 </div>
+
+                <div class="d-flex justify-content-end mt-3">
+                    <button class="btn btn-outline-dark" @onclick="ExportPdfAsync" disabled="@(!CanExportPdf)">
+                        @(IsExporting ? "Exporting..." : "Export PDF")
+                    </button>
+                </div>
             </div>
         </div>
     }
 </div>
-
-@code {
-    private bool IsAdminMode => AppArgs.Mode == AppMode.Admin;
-    private string TargetHost { get; set; } = "localhost";
-    private bool IsRunning { get; set; }
-    private string? ErrorMessage { get; set; }
-
-    private List<ServiceEndpoint> Ports { get; set; } = new();
-    private List<PortRow> Results { get; } = new();
-
-    private bool CustomPortExpanded { get; set; }
-    private string CustomPortText { get; set; } = string.Empty;
-    private string CustomPortName { get; set; } = string.Empty;
-    private HashSet<string> CustomPorts { get; } = new();
-
-    protected override void OnInitialized()
-    {
-        LoadPorts();
-        RebuildResults();
-    }
-
-    private void ToggleCustomPortSection() => CustomPortExpanded = !CustomPortExpanded;
-
-    private void OnCustomPortHeaderKeydown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter" || e.Key == " ")
-        {
-            CustomPortExpanded = !CustomPortExpanded;
-        }
-    }
-
-    private void ReloadPorts()
-    {
-        try
-        {
-            ErrorMessage = null;
-            LoadPorts();
-            RebuildResults();
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-        }
-    }
-
-    private void LoadPorts()
-    {
-        CustomPorts.Clear();
-        Ports = PortProvider.GetPorts(AppArgs.Mode).ToList();
-    }
-
-    private void RebuildResults()
-    {
-        Results.Clear();
-        foreach (var ep in Ports)
-            Results.Add(PortRow.NotChecked(ep.ServiceName, ep.Port, ep.Modes));
-    }
-
-    private void AddCustomPort()
-    {
-        try
-        {
-            ErrorMessage = null;
-
-            if (!int.TryParse((CustomPortText ?? string.Empty).Trim(), out var port))
-            {
-                ErrorMessage = "Custom port must be a number.";
-                return;
-            }
-
-            if (port is < 1 or > 65535)
-            {
-                ErrorMessage = "Custom port must be between 1 and 65535.";
-                return;
-            }
-
-            if (Ports.Any(p => p.Port == port))
-            {
-                ErrorMessage = $"Port {port} is already in the list.";
-                return;
-            }
-
-            var name = (CustomPortName ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(name))
-                name = $"Custom-{port}";
-
-            Ports.Add(new ServiceEndpoint(name, port));
-            CustomPorts.Add(PortRow.MakeKey(port));
-
-            RebuildResults();
-
-            CustomPortText = string.Empty;
-            CustomPortName = string.Empty;
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-        }
-    }
-
-    private void RemoveCustomPort(string key)
-    {
-        try
-        {
-            if (!CustomPorts.Contains(key))
-                return;
-
-            var port = PortRow.ParseKey(key);
-
-            Ports.RemoveAll(p => p.Port == port);
-            CustomPorts.Remove(key);
-
-            RebuildResults();
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-        }
-    }
-
-    private async Task RunAsync()
-    {
-        ErrorMessage = null;
-        RebuildResults();
-
-        var host = (TargetHost ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(host))
-        {
-            ErrorMessage = "Target host is required.";
-            return;
-        }
-
-        if (Ports.Count == 0)
-        {
-            ErrorMessage = "No ports configured.";
-            return;
-        }
-
-        IsRunning = true;
-
-        try
-        {
-            foreach (var ep in Ports)
-            {
-                var ping = await Scanner.PingAsync(host, timeoutMs: 1000);
-                var portResult = await Scanner.CheckAsync(host, ep.Port, timeoutMs: 1500);
-
-                var idx = Results.FindIndex(r => r.Port == ep.Port);
-                if (idx >= 0)
-                    Results[idx] = PortRow.FromResults(ep.ServiceName, ep.Port, ep.Modes, ping, portResult);
-
-                await InvokeAsync(StateHasChanged);
-            }
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-        }
-        finally
-        {
-            IsRunning = false;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    private static string GetRowDetails(PortRow r)
-    {
-        if (!r.Checked) return "Not checked";
-        if (!string.IsNullOrWhiteSpace(r.Error)) return r.Error!;
-        if (r.ConnectTimeMs is not null) return $"Connect: {r.ConnectTimeMs} ms";
-        return "-";
-    }
-
-    private RenderFragment RenderStatusBadge(bool? ok) => builder =>
-    {
-        var (symbol, css, title) = ok switch
-        {
-            null  => ("–", "bg-light text-dark border", "Not checked"),
-            true  => ("✓", "bg-success", "OK"),
-            false => ("✗", "bg-danger", "FAIL")
-        };
-
-        builder.OpenElement(0, "span");
-        builder.AddAttribute(1, "class", $"badge {css}");
-        builder.AddAttribute(2, "title", title);
-        builder.AddContent(3, symbol);
-        builder.CloseElement();
-    };
-
-    private RenderFragment RenderPortBadge(PortRow row) => builder =>
-    {
-        var (symbol, css, title) = row.Checked switch
-        {
-            false => ("–", "bg-light text-dark border", "Not checked"),
-            true when row.PortStatus == PortStatus.Open => ("✓", "bg-success", "Open"),
-            _ => ("✗", "bg-danger", "Closed")
-        };
-
-        builder.OpenElement(0, "span");
-        builder.AddAttribute(1, "class", $"badge {css}");
-        builder.AddAttribute(2, "title", title);
-        builder.AddContent(3, symbol);
-        builder.CloseElement();
-    };
-
-    private string GetModeBadgeClass() => AppArgs.Mode switch
-    {
-        AppMode.Client => "bg-primary",
-        AppMode.Server => "bg-warning text-dark",
-        AppMode.Admin  => "bg-danger",
-        _              => "bg-secondary"
-    };
-
-    private sealed record PortRow(
-        string Name,
-        int Port,
-        string Modes,
-        bool Checked,
-        bool? PingOk,
-        long? PingMs,
-        PortStatus? PortStatus,
-        long? ConnectTimeMs,
-        string? Error)
-    {
-        public string Key => MakeKey(Port);
-
-        public static string MakeKey(int port) => port.ToString();
-
-        public static int ParseKey(string key) => int.Parse(key);
-
-        public static PortRow NotChecked(string name, int port, string modes)
-            => new(name, port, modes, false, null, null, null, null, null);
-
-        public static PortRow FromResults(string name, int port, string modes, PingResult ping, PortResult pr)
-            => new(name, port, modes, true, ping.Ok, ping.RoundtripTime, pr.Status, pr.ConnectTimeMs, pr.Error);
-    }
-}

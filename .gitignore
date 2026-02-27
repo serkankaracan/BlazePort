@@ -416,3 +416,9 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# macOS junk files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*

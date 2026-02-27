@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -9,11 +9,12 @@
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="BlazePort.styles.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
-    <HeadOutlet @rendermode="InteractiveServer" />
+    <HeadOutlet @rendermode="InteractiveServer" /> <!-- Projects dynamic head content (title, meta tags, links) from components into the document head -->
 </head>
 
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    <Routes @rendermode="InteractiveServer" /> <!-- Hosts the application's routing pipeline and renders the current page layout interactively -->
+    <script src="js/export.js"></script>
     <script src="_framework/blazor.web.js"></script>
 </body>
 
